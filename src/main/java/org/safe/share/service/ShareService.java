@@ -3,6 +3,7 @@ package org.safe.share.service;
 import org.safe.share.common.security.SecurityUtils;
 import org.safe.share.document.repository.DocumentRepository;
 import org.safe.share.dto.CreateShareRequest;
+import org.safe.share.dto.DocumentDownload;
 import org.safe.share.model.Document;
 import org.safe.share.model.Share;
 import org.safe.share.repository.ShareRepository;
@@ -54,7 +55,7 @@ public class ShareService {
         return share;
     }
 
-    public byte[] access(String token, String password, String ip, String userAgent)
+    public DocumentDownload access(String token, String password, String ip, String userAgent)
     throws Exception {
 
         Share share = shareRepository.findByToken(token)
@@ -77,9 +78,15 @@ public class ShareService {
 
         Document doc = documentRepository.findById(share.getDocumentId())
                 .orElseThrow(() -> new RuntimeException("Document missing"));
+        byte[] data = auditService.readDocument(doc);
 
-        // Decrypt using OWNER userId
-        return auditService.readDocument(doc);
+        return new DocumentDownload(
+                data,
+                doc.getFileName(),
+                doc.getContentType() != null
+                        ? doc.getContentType()
+                        : "application/octet-stream"
+        );
     }
 
     public void revoke(String token) {
