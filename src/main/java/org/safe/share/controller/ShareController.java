@@ -1,6 +1,7 @@
 package org.safe.share.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.safe.share.Config;
 import org.safe.share.dto.CreateShareRequest;
 import org.safe.share.dto.ShareResponse;
 import org.safe.share.model.AccessLog;
@@ -28,10 +29,10 @@ public class ShareController {
     @PostMapping("/shares")
     public ShareResponse create(@RequestBody CreateShareRequest req) {
         Share share = shareService.createShare(req);
-
+        Config config=new Config();
         return new ShareResponse(
-                "http://localhost:9191/s/" + share.getToken(),
-                share.isOneTime() // 🔥 dynamic, correct
+                config.getFrontendBaseUrl() + share.getToken(),
+                share.isOneTime()
         );
     }
 
