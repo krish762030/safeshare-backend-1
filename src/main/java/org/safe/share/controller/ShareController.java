@@ -1,21 +1,20 @@
 package org.safe.share.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.safe.share.Config;
 import org.safe.share.dto.CreateShareRequest;
 import org.safe.share.dto.ShareResponse;
-import org.safe.share.model.AccessLog;
 import org.safe.share.model.Share;
 import org.safe.share.repository.AccessLogRepository;
 import org.safe.share.repository.ShareRepository;
 import org.safe.share.service.ShareService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 public class ShareController {
+    @Value("${app.frontend.base-url}")
+    private String frontendBaseUrl;
 
     private final ShareService shareService;
     private final AccessLogRepository accessLogRepository;
@@ -29,9 +28,8 @@ public class ShareController {
     @PostMapping("/shares")
     public ShareResponse create(@RequestBody CreateShareRequest req) {
         Share share = shareService.createShare(req);
-        Config config=new Config();
         return new ShareResponse(
-                config.getFrontendBaseUrl() + share.getToken(),
+                frontendBaseUrl + "/s/" + share.getToken(),
                 share.isOneTime()
         );
     }
