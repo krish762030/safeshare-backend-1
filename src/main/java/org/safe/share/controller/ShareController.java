@@ -5,8 +5,6 @@ import org.safe.share.dto.CreateShareRequest;
 import org.safe.share.dto.DocumentDownload;
 import org.safe.share.dto.ShareResponse;
 import org.safe.share.model.Share;
-import org.safe.share.repository.AccessLogRepository;
-import org.safe.share.repository.ShareRepository;
 import org.safe.share.service.ShareService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -19,12 +17,8 @@ public class ShareController {
     private String frontendBaseUrl;
 
     private final ShareService shareService;
-    private final AccessLogRepository accessLogRepository;
-    private final ShareRepository shareRepository;
-    public ShareController(ShareService shareService, AccessLogRepository accessLogRepository, ShareRepository shareRepository) {
+    public ShareController(ShareService shareService) {
         this.shareService = shareService;
-        this.accessLogRepository = accessLogRepository;
-        this.shareRepository = shareRepository;
     }
 
     @PostMapping("/shares")

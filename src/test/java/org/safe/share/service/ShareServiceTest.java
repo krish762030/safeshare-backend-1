@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.safe.share.common.security.SecurityUtils;
 import org.safe.share.document.repository.DocumentRepository;
 import org.safe.share.dto.DocumentDownload;
 import org.safe.share.model.Document;
@@ -57,7 +59,7 @@ class ShareServiceTest {
 
     @Test
     void access_marksOneTimeShareAsUsed() throws Exception {
-        when(shareRepository.findByToken("token-123")).thenReturn(Optional.of(oneTimeShare));
+        when(shareRepository.findByTokenForUpdate("token-123")).thenReturn(Optional.of(oneTimeShare));
         when(documentRepository.findById(20L)).thenReturn(Optional.of(document));
         when(auditService.readDocument(document)).thenReturn(new byte[]{1, 2, 3});
 
@@ -71,27 +73,49 @@ class ShareServiceTest {
     @Test
     void revoke_alwaysPersistsRevocation() {
         Share regularShare = new Share();
+        regularShare.setDocumentId(20L);
         regularShare.setToken("token-456");
         regularShare.setOneTime(false);
         regularShare.setRevoked(false);
 
-        when(shareRepository.findByToken("token-456")).thenReturn(Optional.of(regularShare));
+        try (MockedStatic<SecurityUtils> securityUtils = mockStatic(SecurityUtils.class)) {
+            securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(30L);
+            when(shareRepository.findByToken("token-456")).thenReturn(Optional.of(regularShare));
+            when(documentRepository.findById(20L)).thenReturn(Optional.of(document));
 
-        shareService.revoke("token-456");
+            shareService.revoke("token-456");
 
-        assertTrue(regularShare.isRevoked());
-        verify(shareRepository).save(regularShare);
+            assertTrue(regularShare.isRevoked());
+            verify(shareRepository).save(regularShare);
+        }
     }
 
     @Test
     void access_rejectsAlreadyUsedOneTimeLink() {
         oneTimeShare.setUsed(true);
-        when(shareRepository.findByToken("token-123")).thenReturn(Optional.of(oneTimeShare));
+        when(shareRepository.findByTokenForUpdate("token-123")).thenReturn(Optional.of(oneTimeShare));
 
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> shareService.access("token-123", null, "127.0.0.1", "test-agent"));
 
         assertEquals("This one-time link has already been used", ex.getMessage());
         verify(documentRepository, never()).findById(any());
+    }
+
+    @Test
+    void revoke_deniesNonOwner() {
+        Share regularShare = new Share();
+        regularShare.setDocumentId(20L);
+        regularShare.setToken("token-456");
+        when(shareRepository.findByToken("token-456")).thenReturn(Optional.of(regularShare));
+
+        try (MockedStatic<SecurityUtils> securityUtils = mockStatic(SecurityUtils.class)) {
+            securityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(999L);
+            when(documentRepository.findById(20L)).thenReturn(Optional.of(document));
+
+            RuntimeException ex = assertThrows(RuntimeException.class, () -> shareService.revoke("token-456"));
+            assertEquals("Access denied", ex.getMessage());
+            verify(shareRepository, never()).save(any());
+        }
     }
 }
