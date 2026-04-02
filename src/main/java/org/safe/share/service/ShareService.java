@@ -9,6 +9,8 @@ import org.safe.share.model.Share;
 import org.safe.share.repository.ShareRepository;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -31,7 +33,11 @@ public class ShareService {
         this.auditService = auditService;
     }
 
+    @Transactional
     public Share createShare(CreateShareRequest req) {
+        if (req.expiryMinutes <= 0) {
+            throw new RuntimeException("expiryMinutes must be greater than zero");
+        }
 
         Long userId = SecurityUtils.getCurrentUserId();
 
@@ -49,16 +55,18 @@ public class ShareService {
         share.setRevoked(false);
         share.setUsed(false);
         share.setOneTime(req.oneTime);
+        if (StringUtils.hasText(req.password)) {
+            share.setPasswordHash(encoder.encode(req.password));
+        }
 
-        shareRepository.save(share);
-
-        return share;
+        return shareRepository.save(share);
     }
 
+    @Transactional
     public DocumentDownload access(String token, String password, String ip, String userAgent)
     throws Exception {
 
-        Share share = shareRepository.findByToken(token)
+        Share share = shareRepository.findByTokenForUpdate(token)
                 .orElseThrow(() -> new RuntimeException("Invalid link"));
 
         if (share.isOneTime() && share.isUsed()) {
@@ -79,6 +87,10 @@ public class ShareService {
         Document doc = documentRepository.findById(share.getDocumentId())
                 .orElseThrow(() -> new RuntimeException("Document missing"));
         byte[] data = auditService.readDocument(doc);
+        if (share.isOneTime()) {
+            share.setUsed(true);
+            shareRepository.save(share);
+        }
 
         return new DocumentDownload(
                 data,
@@ -89,13 +101,21 @@ public class ShareService {
         );
     }
 
+    @Transactional
     public void revoke(String token) {
+        Long userId = SecurityUtils.getCurrentUserId();
+
         Share share = shareRepository.findByToken(token)
                 .orElseThrow(() -> new RuntimeException("Not found"));
+        Document doc = documentRepository.findById(share.getDocumentId())
+                .orElseThrow(() -> new RuntimeException("Document missing"));
+        if (!doc.getUserId().equals(userId)) {
+            throw new RuntimeException("Access denied");
+        }
         share.setRevoked(true);
         if (share.isOneTime()) {
             share.setUsed(true);
-            shareRepository.save(share);
         }
+        shareRepository.save(share);
     }
 }
